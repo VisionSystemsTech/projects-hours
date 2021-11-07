@@ -1,2 +1,6 @@
+general:
+  working_dir: .
+  resources_dir: resources
+
 token: aaaaaaaa  # тут должен быть указан токен бота
 db_url: db/data.json
