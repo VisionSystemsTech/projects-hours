@@ -15,7 +15,6 @@ class DataBase:
     _history: pd.DataFrame
     _employees: List[Dict]
     _projects: List[Dict]
-    _managers: List = ['Roman Steinberg', 'Artem Kondrashkin']
 
     def __init__(self):
         self._db_url = SingleConfig().db_url

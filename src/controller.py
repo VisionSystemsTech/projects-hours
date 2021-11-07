@@ -16,15 +16,15 @@ class TimeCounterBot:
     Класс выполняет роль контроллера. Предназначен для настройки и запуска бота.
     """
     def __init__(self, config):
-        token = config['token']
-        self.updater = Updater(token=token, use_context=True)  # заводим апдейтера
+        self.updater = Updater(token=config.token, use_context=True)  # заводим апдейтера
         self._init_conversation()
 
         fmt_str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        logging.basicConfig(filename='bot.log', format=fmt_str, level=logging.INFO)
+        level = logging._nameToLevel(config.general.logging_level)
+        logging.basicConfig(filename='bot.log', format=fmt_str, level=level)
         self._logger = logging.getLogger(__name__)
 
-        self._sender = Sender(token)
+        self._sender = Sender(config.token)
         self._db = DataBase()
 
     def _init_conversation(self):
@@ -50,6 +50,7 @@ class TimeCounterBot:
         self.updater.idle()
 
     def add_hours(self, update: Update, context: CallbackContext):
+        self._logger.debug(f'User {update.message.from_user.username} requested to add hours.')
         guid = uuid4()
         chat_id = update.message.chat_id
         # logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ class TimeCounterBot:
         return 'adding_hours'
 
     def report(self, update: Update, context: CallbackContext):
+        self._logger.debug(f'User {update.message.from_user.username} requested for the report.')
         if len(context.args) > 0:
             day, month, year = context.args[0].split('.')
             day = date(year, month, day)
