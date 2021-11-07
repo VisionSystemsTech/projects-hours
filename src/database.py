@@ -62,16 +62,20 @@ class DataBase:
 
     def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int):
         # Add hours
-        week_start = str(DataBase.get_week_start(day))
-        self._history.append(
-            {
-                'project': project,
-                'employee': telegram_user_name,
-                'date': day,
-                'week': week_start,
-                'hours': hours
-            },
-            ignore_index=True)
+        week_start = DataBase.get_week_start(day)
+        self._history = pd.concat(
+            [
+                self._history,
+                pd.DataFrame({
+                    'project': [project],
+                    'employee': [telegram_user_name],
+                    'date': [str(day)],
+                    'week': [str(week_start)],
+                    'hours': [hours]
+                })
+            ],
+            ignore_index=True
+        )
         self._history.sort_values(by=['employee', 'project'])
         self.dump()
         return True, ''
