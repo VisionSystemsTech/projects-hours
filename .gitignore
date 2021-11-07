@@ -133,4 +133,5 @@ dmypy.json
 
 # Projects 
 config.yaml
-db/
+db/*
+!db/db_example.json

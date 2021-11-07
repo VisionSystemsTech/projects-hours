@@ -1,0 +1,37 @@
+[
+  {
+    "project": "project1",
+    "employee": "e1",
+    "date": "2020-09-07",
+    "week": "2020-09-07",
+    "hours": 8
+  },
+  {
+    "project": "project2",
+    "employee": "e1",
+    "date": "2020-09-08",
+    "week": "2020-09-07",
+    "hours": 2
+  },
+  {
+    "project": "project1",
+    "employee": "e2",
+    "date": "2020-09-07",
+    "week": "2020-09-07",
+    "hours": 8
+  },
+  {
+    "project": "project1",
+    "employee": "e2",
+    "date": "2020-09-08",
+    "week": "2020-09-07",
+    "hours": 8
+  },
+  {
+    "project": "project2",
+    "employee": "e1",
+    "date": "2020-09-08",
+    "week": "2020-09-07",
+    "hours": 6
+  }
+]
