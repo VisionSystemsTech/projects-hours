@@ -16,10 +16,9 @@ def reread_config():
 
 
 @pytest.fixture(autouse=True)
-def mock_db(tmp_path):
+def mock_db(reread_config, tmp_path):
     db_url = tmp_path.joinpath('db.json')
     copy2('db/db_example.json', str(db_url))
-    with open(db_url) as f:
-        data = json.load(f)
-    db = DataBase(db_url)
-    return db, data
+    SingleConfig().db_url = db_url
+    db = DataBase()
+    return db

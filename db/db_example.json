@@ -1,37 +1,63 @@
-[
-  {
-    "project": "project1",
-    "employee": "e1",
-    "date": "2020-09-07",
-    "week": "2020-09-07",
-    "hours": 8
-  },
-  {
-    "project": "project2",
-    "employee": "e1",
-    "date": "2020-09-08",
-    "week": "2020-09-07",
-    "hours": 2
-  },
-  {
-    "project": "project1",
-    "employee": "e2",
-    "date": "2020-09-07",
-    "week": "2020-09-07",
-    "hours": 8
-  },
-  {
-    "project": "project1",
-    "employee": "e2",
-    "date": "2020-09-08",
-    "week": "2020-09-07",
-    "hours": 8
-  },
-  {
-    "project": "project2",
-    "employee": "e1",
-    "date": "2020-09-08",
-    "week": "2020-09-07",
-    "hours": 6
-  }
-]
+{
+  "employees": [
+    {
+      "tg_nick": "serg",
+      "name": "Sergio",
+      "role": "manager"
+    },
+    {
+      "tg_nick": "sean",
+      "name": "Sean",
+      "role": "developer"
+    }
+  ],
+  "projects": [
+    {
+      "name": "Detector",
+      "date_start": "2021-01-01",
+      "date_end": ""
+    },
+    {
+      "name": "Classifier",
+      "date_start": "2021-01-01",
+      "date_end": ""
+    }
+  ],
+  "history": [
+    {
+      "project": "Detector",
+      "employee": "serg",
+      "date": "2021-02-01",
+      "week": "2021-02-01",
+      "hours": 8
+    },
+    {
+      "project": "Classifier",
+      "employee": "serg",
+      "date": "2021-02-02",
+      "week": "2021-02-01",
+      "hours": 2
+    },
+    {
+      "project": "Detector",
+      "employee": "sean",
+      "date": "2021-02-01",
+      "week": "2021-02-01",
+      "hours": 8
+    },
+    {
+      "project": "Detector",
+      "employee": "sean",
+      "date": "2021-02-02",
+      "week": "2021-02-01",
+      "hours": 8
+    },
+    {
+      "project": "Classifier",
+      "employee": "serg",
+      "date": "2021-02-02",
+      "week": "2021-02-01",
+      "hours": 6
+    }    
+  ]
+}

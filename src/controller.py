@@ -25,7 +25,7 @@ class TimeCounterBot:
         self._logger = logging.getLogger(__name__)
 
         self._sender = Sender(token)
-        self._db = DataBase(config['db_url'])
+        self._db = DataBase()
 
     def _init_conversation(self):
         handler = CommandHandler('help', self.help)
@@ -54,24 +54,41 @@ class TimeCounterBot:
         chat_id = update.message.chat_id
         # logger = logging.getLogger(__name__)
         # logger.info('rrr')
-        user = update.message.from_user
-        user_name = f'{user.first_name} {user.last_name}'
-        success, input_data = self.parse_hours_message(guid, update.message.text)
+        tg_user_name = update.message.from_user.username
+        success, input_data = self.parse_hours_message(tg_user_name, update.message.text)
         if not success:
-            pass
-        success, error_message = self._db.add_hours(user_name, **input_data)
+            context.bot.send_message(chat_id=chat_id, text='Incorrect input data format')
+            return
+        success, error_message = self._db.add_hours(tg_user_name, **input_data)
         # result = self._sender.run(guid, name, update.message.text)
         text = 'Successfully recorded.' if success else f'Failed. {error_message}'
         context.bot.send_message(chat_id=chat_id, text=text)
 
-    def parse_hours_message(self, message_guid, message):
+    def parse_hours_message(self, telegram_user_name, message):
         fields = message.split(',')
         fields = list(map(lambda s: s.strip(), fields))
         if len(fields) not in [2, 3]:
-            self._logger.error(f'guid: {message_guid}, error message: incorrect input data format')
             return False, None
 
         project, hours, day, *_ = fields + [str(date.today())]
+
+        # Data validation
+        if not self._db.is_valid_employee(telegram_user_name):  # todo: сделать для всех запросов
+            return False, f'Incorrect user {telegram_user_name}.'
+
+        if not self._db.is_valid_project(project):
+            return False, f'Incorrect project name {project}.'
+
+        try:
+            hours = int(hours)
+        except ValueError:
+            return False, 'Hours must be int.'
+
+        try:
+            day = date.fromisoformat(day)
+        except ValueError:
+            return False, f'Incorrect date {day}'
+
         input_data = {'project': project, 'hours': hours, 'day': day}
         return True, input_data
 
@@ -90,9 +107,8 @@ class TimeCounterBot:
             day = date(year, month, day)
         else:
             day = date.today()
-        user = update.message.from_user
-        user_name = f'{user.first_name} {user.last_name}'
-        text = self._db.report_by_week(user_name, day).to_string()
+        tg_user_name = update.message.from_user.username
+        text = self._db.report_by_week(tg_user_name, day).to_string()
         context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
     def update_table(self, update: Update, context: CallbackContext):
