@@ -4,4 +4,4 @@ general:
   logging_level: INFO
 
 token: aaaaaaaa  # тут должен быть указан токен бота
-db_url: db/data.json
+db_path: db/data.json

@@ -11,33 +11,31 @@ from src.utils.config import SingleConfig
 
 
 class DataBase:
-    _db_url: Path
+    _db_path: Path
     _history: pd.DataFrame
     _employees: List[Dict]
     _projects: List[Dict]
 
     def __init__(self):
-        self._db_url = SingleConfig().db_url
-        with open(self._db_url) as f:
+        self._db_path = SingleConfig().db_path
+        with open(self._db_path) as f:
             data = json.load(f)
         self._employees = data['employees']
         self._projects = data['projects']
-        self._history = pd.DataFrame(data['history'])  # pd.read_json(self._db_url, orient='records')
+        self._history = pd.DataFrame.from_records(data['history'])
 
     # -----------------------
     # Utility methods
     # -----------------------
 
     def dump(self):
-        h = self._history.to_json()
         d = {
             'employees': self._employees,
             'projects': self._projects,
-            'history': self._history.to_json()
+            'history': self._history.to_dict('records')
         }
-        with self._db_url.open('w') as f:
-            json.dump(d, f)
-
+        with self._db_path.open('w') as f:
+            json.dump(d, f, ensure_ascii=False)
 
     @staticmethod
     def get_week(day: date) -> tuple:
@@ -65,9 +63,15 @@ class DataBase:
     def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int):
         # Add hours
         week_start = str(DataBase.get_week_start(day))
-        self._history.append({
-            'project': project, 'employee': telegram_user_name, 'date': day, 'week': week_start, 'hours': hours
-        })
+        self._history.append(
+            {
+                'project': project,
+                'employee': telegram_user_name,
+                'date': day,
+                'week': week_start,
+                'hours': hours
+            },
+            ignore_index=True)
         self._history.sort_values(by=['employee', 'project'])
         self.dump()
         return True, ''
