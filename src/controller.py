@@ -3,12 +3,19 @@ import logging
 from uuid import uuid4
 from datetime import date
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import Filters, MessageHandler, CommandHandler, CallbackContext, ConversationHandler
 from telegram.ext import Updater
 
 from src.sender import Sender
 from src.database import DataBase
+
+from enum import Enum
+
+
+class States(Enum):
+    MENU = 0
+    ADD_HOURS = 1
 
 
 class TimeCounterBot:
@@ -20,7 +27,7 @@ class TimeCounterBot:
         self._init_conversation()
 
         fmt_str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        level = logging._nameToLevel(config.general.logging_level)
+        level = logging._nameToLevel[config.general.logging_level]
         logging.basicConfig(filename='bot.log', format=fmt_str, level=level)
         self._logger = logging.getLogger(__name__)
 
@@ -34,15 +41,22 @@ class TimeCounterBot:
         handler = CommandHandler('update', self.update_table)
         self.updater.dispatcher.add_handler(handler)
 
-        handler = CommandHandler('report', self.report)
-        self.updater.dispatcher.add_handler(handler)
-
-        entry_points = [CommandHandler(['add_hours'], self.before_add_hours)]
-        states = {
-            'adding_hours': [MessageHandler(Filters.text, self.add_hours)],
-        }
-        fallbacks = []
-        handler = ConversationHandler(entry_points, states, fallbacks)
+        # todo: error handler
+        handler = ConversationHandler(
+            # entry_points=[
+            #     CommandHandler(['add_hours'], self.before_add_hours),
+            #     CommandHandler(['report'], self.report),
+            # ],
+            entry_points=[CommandHandler('start', lambda a, b: 'menu')],
+            states={
+                States.MENU: [
+                    CommandHandler(['add_hours'], self.before_add_hours),
+                    CommandHandler(['report'], self.report),
+                ],
+                States.ADD_HOURS: [MessageHandler(Filters.text, self.add_hours)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)]
+        )
         self.updater.dispatcher.add_handler(handler)
 
     def start(self):
@@ -58,12 +72,13 @@ class TimeCounterBot:
         tg_user_name = update.message.from_user.username
         success, input_data = self.parse_hours_message(tg_user_name, update.message.text)
         if not success:
-            context.bot.send_message(chat_id=chat_id, text='Incorrect input data format')
+            context.bot.send_message(chat_id=chat_id, text='Incorrect input data format. Try again.')
             return
         success, error_message = self._db.add_hours(tg_user_name, **input_data)
         # result = self._sender.run(guid, name, update.message.text)
         text = 'Successfully recorded.' if success else f'Failed. {error_message}'
         context.bot.send_message(chat_id=chat_id, text=text)
+        return States.MENU
 
     def parse_hours_message(self, telegram_user_name, message):
         fields = message.split(',')
@@ -100,7 +115,7 @@ class TimeCounterBot:
     @staticmethod
     def before_add_hours(update: Update, context: CallbackContext):
         context.bot.send_message(chat_id=update.effective_chat.id, text='Send time in format \"project,time[,day]\"')
-        return 'adding_hours'
+        return States.ADD_HOURS
 
     def report(self, update: Update, context: CallbackContext):
         self._logger.debug(f'User {update.message.from_user.username} requested for the report.')
@@ -116,3 +131,12 @@ class TimeCounterBot:
     def update_table(self, update: Update, context: CallbackContext):
         # self._sender.run
         pass
+
+    def cancel(self, update: Update, context: CallbackContext) -> int:
+        """Cancels and ends the conversation."""
+        user = update.message.from_user
+        self._logger.debug(f'User {user.username} canceled the conversation.')
+        update.message.reply_text(
+            'Bye! I hope we can talk again some day.' # , reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
