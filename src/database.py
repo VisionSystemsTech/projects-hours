@@ -2,7 +2,7 @@
 import json
 from datetime import date, timedelta, datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -107,3 +107,16 @@ class DataBase:
         # Process view before return
         view = view.groupby(by=['project', 'employee'], as_index=False)
         return view.aggregate(np.sum)
+
+    def get_projects(self, day: date) -> List[str]:
+        actual = DataBase.get_week_start(day)
+        result = list()
+        for project in self._projects:
+            if date.fromisoformat(project['date_start']) > actual:
+                continue
+
+            if len(project['date_end']) != 0 and date.fromisoformat(project['date_end']) < actual:
+                continue
+
+            result.append(project['name'])
+        return result

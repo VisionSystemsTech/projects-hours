@@ -31,6 +31,13 @@ def test_report(tmp_path, mock_db):
     assert_dataframes(expected, obtained)
 
 
+def test_get_projects(tmp_path, mock_db):
+    db = mock_db
+    obtained = db.get_projects(date(2021, 2, 1))
+    expected = ['Detector', 'Classifier']
+    assert expected == obtained
+
+
 def assert_dataframes(expected, obtained):
     assert expected.shape[0] == obtained.shape[0], 'shapes not equal'
     for index, row in obtained.iterrows():

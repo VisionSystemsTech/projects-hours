@@ -50,8 +50,9 @@ class TimeCounterBot:
             entry_points=[CommandHandler('start', lambda a, b: States.MENU)],
             states={
                 States.MENU: [
-                    CommandHandler(['add_hours'], self.before_add_hours),
-                    CommandHandler(['report'], self.report),
+                    CommandHandler('add_hours', self.before_add_hours),
+                    CommandHandler('report', self.report),
+                    CommandHandler('projects', self.show_projects),
                 ],
                 States.ADD_HOURS: [MessageHandler(Filters.text, self.add_hours)],
             },
@@ -89,21 +90,23 @@ class TimeCounterBot:
         project, hours, day, *_ = fields + [str(date.today())]
 
         # Data validation
+        try:
+            day = date.fromisoformat(day)
+        except ValueError:
+            return False, f'Incorrect date {day}'
+
         if not self._db.is_valid_employee(telegram_user_name):  # todo: сделать для всех запросов
             return False, f'Incorrect user {telegram_user_name}.'
 
         if not self._db.is_valid_project(project):
             return False, f'Incorrect project name {project}.'
+        elif not project in self._db.get_projects(day):
+            return False, f'The project {project} is not actual now.'
 
         try:
             hours = int(hours)
         except ValueError:
             return False, 'Hours must be int.'
-
-        try:
-            day = date.fromisoformat(day)
-        except ValueError:
-            return False, f'Incorrect date {day}'
 
         input_data = {'project': project, 'hours': hours, 'day': day}
         return True, input_data
@@ -126,6 +129,17 @@ class TimeCounterBot:
             day = date.today()
         tg_user_name = update.message.from_user.username
         text = self._db.report_by_week(tg_user_name, day).to_string(index=False)
+        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+    def show_projects(self, update: Update, context: CallbackContext):
+        self._logger.debug(f'User {update.message.from_user.username} requested the list of projects.')
+        if len(context.args) > 0:
+            day, month, year = context.args[0].split('.')
+            day = date(year, month, day)
+        else:
+            day = date.today()
+
+        text = ' '.join(self._db.get_projects(day))
         context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
     def update_table(self, update: Update, context: CallbackContext):
