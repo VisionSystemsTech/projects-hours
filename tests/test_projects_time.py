@@ -6,23 +6,21 @@ from datetime import date
 import pandas as pd
 
 
-def test_add_hours(tmp_path, mock_db):
-    db = mock_db
-    obtained = db.report_by_employee('sean', 'serg', date(2021, 2, 1))
+def test_report_by_employee(tmp_path, fake_db):
+    obtained = fake_db.report_by_employee('sean', 'serg', date(2021, 2, 1))
     expected = 0
     assert expected == obtained.shape[0]
 
-    obtained = db.report_by_employee('sean', 'sean', date(2021, 2, 1))
+    obtained = fake_db.report_by_employee('sean', 'sean', date(2021, 2, 1))
     expected = pd.DataFrame([{'project': 'Detector', 'employee': 'sean', 'hours': 16}])
     assert_dataframes(expected, obtained)
 
-    obtained = db.report_by_employee('serg', 'sean', date(2021, 2, 1))
+    obtained = fake_db.report_by_employee('serg', 'sean', date(2021, 2, 1))
     assert_dataframes(expected, obtained)
 
 
-def test_report(tmp_path, mock_db):
-    db = mock_db
-    obtained = db.report_by_week('serg', date(2021, 2, 1))
+def test_report(tmp_path, fake_db):
+    obtained = fake_db.report_by_week('serg', date(2021, 2, 1))
     expected = pd.DataFrame([
         {'project': 'Classifier', 'employee': 'serg', 'hours': 8},
         {'project': 'Detector', 'employee': 'sean', 'hours': 16},
@@ -31,11 +29,20 @@ def test_report(tmp_path, mock_db):
     assert_dataframes(expected, obtained)
 
 
-def test_get_projects(tmp_path, mock_db):
-    db = mock_db
-    obtained = db.get_projects(date(2021, 2, 1))
+def test_get_projects(tmp_path, fake_db):
+    obtained = fake_db.get_projects(date(2021, 2, 1))
     expected = ['Detector', 'Classifier']
     assert expected == obtained
+
+
+def test_add_hours(tmp_path, fake_db):
+    fake_db.add_hours('serg', 'Detector', date(2021, 2, 4), 8)
+    obtained = fake_db.report_by_employee('serg', 'serg', date(2021, 2, 1))
+    expected = pd.DataFrame([
+        {'project': 'Detector', 'employee': 'serg', 'hours': 16},
+        {'project': 'Classifier', 'employee': 'serg', 'hours': 8}
+    ])
+    assert_dataframes(expected, obtained)
 
 
 def assert_dataframes(expected, obtained):
