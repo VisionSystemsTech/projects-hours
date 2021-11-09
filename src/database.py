@@ -60,7 +60,7 @@ class DataBase:
     # Action methods
     # -----------------------
 
-    def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int):
+    def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int) -> Tuple[bool, str]:
         # Add hours
         week_start = DataBase.get_week_start(day)
         self._history = pd.concat(
@@ -80,7 +80,7 @@ class DataBase:
         self.dump()
         return True, ''
 
-    def report_by_week(self, user: str, day: date):
+    def report_by_week(self, user: str, day: date) -> pd.DataFrame:
         # Prepare view
         cond = self._history.week == str(DataBase.get_week_start(day))
         view = self._history[cond]
@@ -93,7 +93,7 @@ class DataBase:
         view = view.groupby(by=['project', 'employee'], as_index=False)
         return view.aggregate(np.sum)
 
-    def report_by_employee(self, user: str, employee: str, day: date):
+    def report_by_employee(self, user: str, employee: str, day: date) -> pd.DataFrame:
         # Prepare view
         cond = self._history.week == str(DataBase.get_week_start(day))
         view = self._history[cond]

@@ -47,7 +47,7 @@ class TimeCounterBot:
             #     CommandHandler(['add_hours'], self.before_add_hours),
             #     CommandHandler(['report'], self.report),
             # ],
-            entry_points=[CommandHandler('start', lambda a, b: 'menu')],
+            entry_points=[CommandHandler('start', lambda a, b: States.MENU)],
             states={
                 States.MENU: [
                     CommandHandler(['add_hours'], self.before_add_hours),
@@ -125,7 +125,7 @@ class TimeCounterBot:
         else:
             day = date.today()
         tg_user_name = update.message.from_user.username
-        text = self._db.report_by_week(tg_user_name, day).to_string()
+        text = self._db.report_by_week(tg_user_name, day).to_string(index=False)
         context.bot.send_message(chat_id=update.effective_chat.id, text=text)
 
     def update_table(self, update: Update, context: CallbackContext):
