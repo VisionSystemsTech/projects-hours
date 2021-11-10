@@ -3,85 +3,40 @@ import logging
 from uuid import uuid4
 from datetime import date
 
-from telegram import Update, ReplyKeyboardRemove
-from telegram.ext import Filters, MessageHandler, CommandHandler, CallbackContext, ConversationHandler
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Filters, MessageHandler, CommandHandler, CallbackContext, ConversationHandler, \
+    CallbackQueryHandler
 from telegram.ext import Updater
 
 from src.sender import Sender
 from src.database import DataBase
-
-from enum import Enum
-
-
-class States(Enum):
-    MENU = 0
-    ADD_HOURS = 1
+from src.utils.config import SingleConfig
 
 
-class TimeCounterBot:
+class Controller:
     """
     Класс выполняет роль контроллера. Предназначен для настройки и запуска бота.
     """
-    def __init__(self, config):
-        self.updater = Updater(token=config.token, use_context=True)  # заводим апдейтера
-        self._init_conversation()
-
-        fmt_str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        level = logging._nameToLevel[config.general.logging_level]
-        logging.basicConfig(filename='bot.log', format=fmt_str, level=level)
-        self._logger = logging.getLogger(__name__)
-
-        self._sender = Sender(config.token)
+    def __init__(self):
+        self._sender = Sender(SingleConfig().token)
         self._db = DataBase()
 
-    def _init_conversation(self):
-        handler = CommandHandler('help', self.help)
-        self.updater.dispatcher.add_handler(handler)
+    def project_button(self, update: Update, context: CallbackContext):
+        query = update.callback_query
+        variant = query.data
+        query.answer() # смотри https://core.telegram.org/bots/api#callbackquery.
+        # query.edit_message_text(text=f"Выбранный вариант: {variant}")
+        self.show_projects()
 
-        handler = CommandHandler('update', self.update_table)
-        self.updater.dispatcher.add_handler(handler)
-
-        # todo: error handler
-        handler = ConversationHandler(
-            # entry_points=[
-            #     CommandHandler(['add_hours'], self.before_add_hours),
-            #     CommandHandler(['report'], self.report),
-            # ],
-            entry_points=[CommandHandler('start', lambda a, b: States.MENU)],
-            states={
-                States.MENU: [
-                    CommandHandler('add_hours', self.before_add_hours),
-                    CommandHandler('report', self.report),
-                    CommandHandler('projects', self.show_projects),
-                ],
-                States.ADD_HOURS: [MessageHandler(Filters.text, self.add_hours)],
-            },
-            fallbacks=[CommandHandler('cancel', self.cancel)]
-        )
-        self.updater.dispatcher.add_handler(handler)
-
-    def start(self):
-        self.updater.start_polling()
-        self.updater.idle()
-
-    def add_hours(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested to add hours.')
-        guid = uuid4()
-        chat_id = update.message.chat_id
-        # logger = logging.getLogger(__name__)
-        # logger.info('rrr')
-        tg_user_name = update.message.from_user.username
-        success, input_data = self.parse_hours_message(tg_user_name, update.message.text)
+    def add_hours(self, tg_user_name: str, input_text: str):
+        success, input_data = self._parse_hours_message(tg_user_name, input_text)
         if not success:
-            context.bot.send_message(chat_id=chat_id, text='Incorrect input data format. Try again.')
-            return
+            return success, 'Incorrect input data format. Try again.'
         success, error_message = self._db.add_hours(tg_user_name, **input_data)
         # result = self._sender.run(guid, name, update.message.text)
-        text = 'Successfully recorded.' if success else f'Failed. {error_message}'
-        context.bot.send_message(chat_id=chat_id, text=text)
-        return States.MENU
+        return success, error_message
 
-    def parse_hours_message(self, telegram_user_name, message):
+    def _parse_hours_message(self, telegram_user_name: str, message: str):
         fields = message.split(',')
         fields = list(map(lambda s: s.strip(), fields))
         if len(fields) not in [2, 3]:
@@ -100,7 +55,7 @@ class TimeCounterBot:
 
         if not self._db.is_valid_project(project):
             return False, f'Incorrect project name {project}.'
-        elif not project in self._db.get_projects(day):
+        elif project not in self._db.get_projects(day):
             return False, f'The project {project} is not actual now.'
 
         try:
@@ -112,45 +67,27 @@ class TimeCounterBot:
         return True, input_data
 
     @staticmethod
-    def help(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='You can /add_hours, /report [date], ...')
-
-    @staticmethod
-    def before_add_hours(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='Send time in format \"project,time[,day]\"')
-        return States.ADD_HOURS
-
-    def report(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested for the report.')
-        if len(context.args) > 0:
-            day, month, year = context.args[0].split('.')
-            day = date(year, month, day)
+    def _parse_date(message: str) -> date:
+        if len(message) > 0:
+            try:
+                year, month, day = message.split('-')
+                day = date(year, month, day)
+            except ValueError:
+                day = date.today()
         else:
             day = date.today()
-        tg_user_name = update.message.from_user.username
-        text = self._db.report_by_week(tg_user_name, day).to_string(index=False)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        return day
 
-    def show_projects(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested the list of projects.')
-        if len(context.args) > 0:
-            day, month, year = context.args[0].split('.')
-            day = date(year, month, day)
-        else:
-            day = date.today()
+    def report(self, tg_user_name: str, message: str):
+        day = self._parse_date(message)
+        reply_text = self._db.report_by_week(tg_user_name, day).to_string(index=False)
+        return reply_text
 
-        text = ' '.join(self._db.get_projects(day))
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+    def show_projects(self, message: str):
+        day = self._parse_date(message)
+        return ' '.join(self._db.get_projects(day))
 
     def update_table(self, update: Update, context: CallbackContext):
         # self._sender.run
         pass
 
-    def cancel(self, update: Update, context: CallbackContext) -> int:
-        """Cancels and ends the conversation."""
-        user = update.message.from_user
-        self._logger.debug(f'User {user.username} canceled the conversation.')
-        update.message.reply_text(
-            'Bye! I hope we can talk again some day.' # , reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
