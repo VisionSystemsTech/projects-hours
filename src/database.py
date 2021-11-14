@@ -2,7 +2,7 @@
 import json
 from datetime import date, timedelta, datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,33 +11,31 @@ from src.utils.config import SingleConfig
 
 
 class DataBase:
-    _db_url: Path
+    _db_path: Path
     _history: pd.DataFrame
     _employees: List[Dict]
     _projects: List[Dict]
 
     def __init__(self):
-        self._db_url = SingleConfig().db_url
-        with open(self._db_url) as f:
+        self._db_path = SingleConfig().db_path
+        with open(self._db_path) as f:
             data = json.load(f)
         self._employees = data['employees']
         self._projects = data['projects']
-        self._history = pd.DataFrame(data['history'])  # pd.read_json(self._db_url, orient='records')
+        self._history = pd.DataFrame.from_records(data['history'])
 
     # -----------------------
     # Utility methods
     # -----------------------
 
     def dump(self):
-        h = self._history.to_json()
         d = {
             'employees': self._employees,
             'projects': self._projects,
-            'history': self._history.to_json()
+            'history': self._history.to_dict('records')
         }
-        with self._db_url.open('w') as f:
-            json.dump(d, f)
-
+        with self._db_path.open('w') as f:
+            json.dump(d, f, ensure_ascii=False)
 
     @staticmethod
     def get_week(day: date) -> tuple:
@@ -62,17 +60,37 @@ class DataBase:
     # Action methods
     # -----------------------
 
-    def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int):
+    def add_hours(self, telegram_user_name: str, project: str, day: date, hours: int) -> Tuple[bool, str]:
         # Add hours
-        week_start = str(DataBase.get_week_start(day))
-        self._history.append({
-            'project': project, 'employee': telegram_user_name, 'date': day, 'week': week_start, 'hours': hours
-        })
+        week_start = DataBase.get_week_start(day)
+        self._history = pd.concat(
+            [
+                self._history,
+                pd.DataFrame({
+                    'project': [project],
+                    'employee': [telegram_user_name],
+                    'date': [str(day)],
+                    'week': [str(week_start)],
+                    'hours': [hours]
+                })
+            ],
+            ignore_index=True
+        )
         self._history.sort_values(by=['employee', 'project'])
         self.dump()
         return True, ''
 
-    def report_by_week(self, user: str, day: date):
+    def delete_hours(self, tg_user_name: str, day: date):
+        week_start = DataBase.get_week_start(day)
+        indexes_to_remove = self._history[
+            (self._history['week'] == str(week_start)) &
+            (self._history['employee'] == tg_user_name)
+        ].index
+        self._history.drop(index=indexes_to_remove, inplace=True)
+        self.dump()
+        return len(indexes_to_remove)
+
+    def report_by_week(self, user: str, day: date) -> pd.DataFrame:
         # Prepare view
         cond = self._history.week == str(DataBase.get_week_start(day))
         view = self._history[cond]
@@ -85,7 +103,7 @@ class DataBase:
         view = view.groupby(by=['project', 'employee'], as_index=False)
         return view.aggregate(np.sum)
 
-    def report_by_employee(self, user: str, employee: str, day: date):
+    def report_by_employee(self, user: str, employee: str, day: date) -> pd.DataFrame:
         # Prepare view
         cond = self._history.week == str(DataBase.get_week_start(day))
         view = self._history[cond]
@@ -99,3 +117,16 @@ class DataBase:
         # Process view before return
         view = view.groupby(by=['project', 'employee'], as_index=False)
         return view.aggregate(np.sum)
+
+    def get_projects(self, day: date) -> List[str]:
+        actual = DataBase.get_week_start(day)
+        result = list()
+        for project in self._projects:
+            if date.fromisoformat(project['date_start']) > actual:
+                continue
+
+            if len(project['date_end']) != 0 and date.fromisoformat(project['date_end']) < actual:
+                continue
+
+            result.append(project['name'])
+        return result
