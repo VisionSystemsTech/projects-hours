@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from typing import Tuple
 from uuid import uuid4
 from datetime import date
 
@@ -36,6 +37,13 @@ class Controller:
         # result = self._sender.run(guid, name, update.message.text)
         return success, error_message
 
+    def delete_hours(self, tg_user_name: str, input_text: str) -> Tuple[bool, int, str]:
+        success, day = self._parse_date(input_text)
+        error_message = '' if success else 'Неверный формат даты.\n'
+        n = 0 if success else self._db.delete_hours(tg_user_name, day) > 0
+        return success, n, error_message
+        # result = self._sender.run(guid, name, update.message.text)
+
     def _parse_hours_message(self, telegram_user_name: str, message: str):
         fields = message.split(',')
         fields = list(map(lambda s: s.strip(), fields))
@@ -67,27 +75,30 @@ class Controller:
         return True, input_data
 
     @staticmethod
-    def _parse_date(message: str) -> date:
+    def _parse_date(message: str) -> Tuple[bool, date]:
         if len(message) > 0:
             try:
-                year, month, day = message.split('-')
-                day = date(year, month, day)
+                input_date = date.fromisoformat(message.strip())
             except ValueError:
-                day = date.today()
+                return False, date.today()
         else:
-            day = date.today()
-        return day
+            input_date = date.today()
+        return True, input_date
 
     def report(self, tg_user_name: str, message: str):
-        day = self._parse_date(message)
-        reply_text = self._db.report_by_week(tg_user_name, day).to_string(index=False)
+        success, day = self._parse_date(message)
+        reply_text = '' if success else 'Неверный формат даты.\n'
+        reply_text += f'Отчет за неделю с {DataBase.get_week_start(day)}.\n'
+        reply_text += self._db.report_by_week(tg_user_name, day).to_string(index=False)
         return reply_text
 
-    def show_projects(self, message: str):
-        day = self._parse_date(message)
-        return ' '.join(self._db.get_projects(day))
+    def show_projects(self, message: str = ''):
+        success, day = self._parse_date(message)
+        reply_text = '' if success else 'Неверный формат даты.\n'
+        reply_text += f'Активные проекты на неделю с {DataBase.get_week_start(day)}.\n'
+        reply_text += ' '.join(self._db.get_projects(day))
+        return reply_text
 
     def update_table(self, update: Update, context: CallbackContext):
         # self._sender.run
         pass
-

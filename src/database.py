@@ -80,6 +80,16 @@ class DataBase:
         self.dump()
         return True, ''
 
+    def delete_hours(self, tg_user_name: str, day: date):
+        week_start = DataBase.get_week_start(day)
+        indexes_to_remove = self._history[
+            (self._history['week'] == str(week_start)) &
+            (self._history['employee'] == tg_user_name)
+        ].index
+        self._history.drop(index=indexes_to_remove, inplace=True)
+        self.dump()
+        return len(indexes_to_remove)
+
     def report_by_week(self, user: str, day: date) -> pd.DataFrame:
         # Prepare view
         cond = self._history.week == str(DataBase.get_week_start(day))

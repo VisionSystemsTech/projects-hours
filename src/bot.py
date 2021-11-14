@@ -15,6 +15,7 @@ from src.utils.config import SingleConfig
 class States(Enum):
     MENU = 0
     ADD_HOURS = 1
+    DELETE_HOURS = 2
 
 
 class HoursCounterBot:
@@ -37,22 +38,20 @@ class HoursCounterBot:
     def _init_conversation(self):
         # todo: error handler
         handler = ConversationHandler(
-            entry_points=[CommandHandler('start', self.say_welcome)],
-            # entry_points=[CallbackQueryHandler(self.say_welcome, pattern='start')],
+            entry_points=[
+                CommandHandler('start', HoursCounterBot.say_welcome),
+            ],
             states={
                 States.MENU: [
-                    CommandHandler('add_hours', self.before_add_hours),
+                    CommandHandler('add_hours', HoursCounterBot.before_add_hours),
+                    CommandHandler('delete_hours', HoursCounterBot.before_delete_hours),
                     CommandHandler('report', self.report),
                     CommandHandler('projects', self.show_projects),
-                    # CallbackQueryHandler(self.before_add_hours, pattern='add_hours'),
-                    # CallbackQueryHandler(self.report, pattern='report'),
-                    # CallbackQueryHandler(self.show_projects, pattern='projects'),
-                    # CallbackQueryHandler(self.project_button, pattern='projects'),
                 ],
                 States.ADD_HOURS: [MessageHandler(Filters.text, self.add_hours)],
+                States.DELETE_HOURS: [MessageHandler(Filters.text, self.delete_hours)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)],
-            # per_message=True,
         )
         self._updater.dispatcher.add_handler(handler)
 
@@ -60,60 +59,77 @@ class HoursCounterBot:
         self._updater.start_polling()
         self._updater.idle()
 
-    def say_welcome(self, update: Update, context: CallbackContext):
+    @staticmethod
+    def say_welcome(update: Update, context: CallbackContext):
         """Начинает диалог и предлагает меню"""
-        reply_keyboard = [[
-            InlineKeyboardButton('Проекты', callback_data='/projects'),
-            InlineKeyboardButton('Отчет', callback_data='/report'),
-            InlineKeyboardButton('Часы', callback_data='/add_hours'),
-        ]]
-
-        update.message.reply_text(
-            'Привет!',
-            reply_markup=InlineKeyboardMarkup(
-                reply_keyboard, one_time_keyboard=False
-            ),
-        )
-        return States.MENU
-
-    def add_hours(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested to add hours.')
-        chat_id = update.message.chat_id
-        tg_user_name = update.message.from_user.username
-        success, error_message = self._controller.add_hours(tg_user_name, update.message.text)
-        if not success:
-            context.bot.send_message(chat_id=chat_id, text=error_message)
-            return
-        # update.message.reply_text(
-        context.bot.send_message(chat_id=chat_id, text='Successfully recorded.')
+        HoursCounterBot.help(update, context)
         return States.MENU
 
     @staticmethod
     def help(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='You can /add_hours, /report [date], ...')
+        """Подсказка"""
+        update.message.reply_text('Привет! Вы можете использовать следующие команды:\n'
+                                  '/projects - список активных проектов,\n'
+                                  '/add_hours - добавление часов к рабочей неделе (неделя определяется '
+                                  'указанием даты, любой входящей в нужную неделю),\n'
+                                  '/delete_hours - удаление часов за рабочую неделю (неделя определяется '
+                                  'указанием даты, любой входящей в нужную неделю),\n'
+                                  '/report [date] - отчет по часам (если дата не указана, то по '
+                                  'умолчанию используется сегодняшняя.\n'
+                                  'Формат дат ISO: ГГГГ-ММ-ДД.')
 
     @staticmethod
     def before_add_hours(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='Send time in format \"project,time[,day]\"')
+        update.message.reply_text('Формат \"проект,часы[,дата]\".')
         return States.ADD_HOURS
 
+    def before_delete_hours(update: Update, context: CallbackContext):
+        update.message.reply_text('Укажите дату, относящуюся к неделе, в которой надо удалить часы.')
+        return States.DELETE_HOURS
+
+    def add_hours(self, update: Update, context: CallbackContext):
+        self._logger.info(f'User {update.message.from_user.username} requested to add hours.')
+        tg_user_name = update.message.from_user.username
+        success, error_message = self._controller.add_hours(tg_user_name, update.message.text)
+        if not success:
+            update.message.reply_text(error_message)
+            return
+        update.message.reply_text('Часы добавлены.')
+        return States.MENU
+
+    def delete_hours(self, update: Update, context: CallbackContext):
+        self._logger.info(f'User {update.message.from_user.username} requested to delete hours.')
+        tg_user_name = update.message.from_user.username
+        success, n, error_message = self._controller.delete_hours(tg_user_name, update.message.text)
+        if not success:
+            update.message.reply_text(error_message)
+            return
+        reply_message = 'Часы удалены.' if n > 0 else f'На неделе с датой {update.message.text} часов не было введено.'
+        update.message.reply_text(reply_message)
+        return States.MENU
+
     def report(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested for the report.')
+        self._logger.info(f'User {update.message.from_user.username} requested for the report.')
         tg_user_name = update.message.from_user.username
         message = update.message.text
+        if '/report' in message:
+            message = message[7:]
         text = self._controller.report(tg_user_name, message)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        update.message.reply_text(text)
 
     def show_projects(self, update: Update, context: CallbackContext):
-        self._logger.debug(f'User {update.message.from_user.username} requested the list of projects.')
-        text = self._controller.show_projects(update.message.text)
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        self._logger.info(f'User {update.message.from_user.username} requested the list of projects.')
+        message = update.message.text
+        if '/projects' in message:
+            message = message[9:]
+        text = self._controller.show_projects(message)
+        update.message.reply_text(text)
 
     def cancel(self, update: Update, context: CallbackContext) -> int:
         """Cancels and ends the conversation."""
         user = update.message.from_user
-        self._logger.debug(f'User {user.username} canceled the conversation.')
+        self._logger.info(f'User {user.username} canceled the conversation.')
         update.message.reply_text(
-            'Bye! I hope we can talk again some day.' # , reply_markup=ReplyKeyboardRemove()
+            'Завершаю разговор.'  # , reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
