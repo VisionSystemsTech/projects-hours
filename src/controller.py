@@ -44,6 +44,9 @@ class Controller:
         return success, n, error_message
         # result = self._sender.run(guid, name, update.message.text)
 
+    def check_access(self, tg_user_name: str):
+        return self._db.is_valid_employee(tg_user_name)
+
     def _parse_hours_message(self, telegram_user_name: str, message: str):
         fields = message.split(',')
         fields = list(map(lambda s: s.strip(), fields))

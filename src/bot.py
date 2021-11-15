@@ -39,7 +39,7 @@ class HoursCounterBot:
         # todo: error handler
         handler = ConversationHandler(
             entry_points=[
-                CommandHandler('start', HoursCounterBot.say_welcome),
+                CommandHandler('start', self.say_welcome),
             ],
             states={
                 States.MENU: [
@@ -60,12 +60,6 @@ class HoursCounterBot:
         self._updater.idle()
 
     @staticmethod
-    def say_welcome(update: Update, context: CallbackContext):
-        """Начинает диалог и предлагает меню"""
-        HoursCounterBot.help(update, context)
-        return States.MENU
-
-    @staticmethod
     def help(update: Update, context: CallbackContext):
         """Подсказка"""
         update.message.reply_text('Привет! Вы можете использовать следующие команды:\n'
@@ -83,9 +77,19 @@ class HoursCounterBot:
         update.message.reply_text('Формат \"проект,часы[,дата]\".')
         return States.ADD_HOURS
 
+    @staticmethod
     def before_delete_hours(update: Update, context: CallbackContext):
         update.message.reply_text('Укажите дату, относящуюся к неделе, в которой надо удалить часы.')
         return States.DELETE_HOURS
+
+    def say_welcome(self, update: Update, context: CallbackContext):
+        """Начинает диалог и предлагает меню"""
+        success = self._controller.check_access(update.message.from_user.username)
+        if not success:
+            update.message.reply_text('Вас нет в базе сотрудников Vision Systems!')
+            return self.cancel(update, context)
+        HoursCounterBot.help(update, context)
+        return States.MENU
 
     def add_hours(self, update: Update, context: CallbackContext):
         self._logger.info(f'User {update.message.from_user.username} requested to add hours.')
