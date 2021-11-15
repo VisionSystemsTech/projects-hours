@@ -1,99 +1,106 @@
 # -*- coding: utf-8 -*-
 import logging
+from typing import Tuple
 from uuid import uuid4
 from datetime import date
 
-from telegram import Update
-from telegram.ext import Filters, MessageHandler, CommandHandler, CallbackContext, ConversationHandler
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Filters, MessageHandler, CommandHandler, CallbackContext, ConversationHandler, \
+    CallbackQueryHandler
 from telegram.ext import Updater
 
 from src.sender import Sender
 from src.database import DataBase
+from src.utils.config import SingleConfig
 
 
-class TimeCounterBot:
+class Controller:
     """
     Класс выполняет роль контроллера. Предназначен для настройки и запуска бота.
     """
-    def __init__(self, config):
-        token = config['token']
-        self.updater = Updater(token=token, use_context=True)  # заводим апдейтера
-        self._init_conversation()
+    def __init__(self):
+        self._sender = Sender(SingleConfig().token)
+        self._db = DataBase()
 
-        fmt_str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        logging.basicConfig(filename='bot.log', format=fmt_str, level=logging.INFO)
-        self._logger = logging.getLogger(__name__)
+    def project_button(self, update: Update, context: CallbackContext):
+        query = update.callback_query
+        variant = query.data
+        query.answer() # смотри https://core.telegram.org/bots/api#callbackquery.
+        # query.edit_message_text(text=f"Выбранный вариант: {variant}")
+        self.show_projects()
 
-        self._sender = Sender(token)
-        self._db = DataBase(config['db_url'])
-
-    def _init_conversation(self):
-        handler = CommandHandler('help', self.help)
-        self.updater.dispatcher.add_handler(handler)
-
-        handler = CommandHandler('update', self.update_table)
-        self.updater.dispatcher.add_handler(handler)
-
-        handler = CommandHandler('report', self.report)
-        self.updater.dispatcher.add_handler(handler)
-
-        entry_points = [CommandHandler(['add_hours'], self.before_add_hours)]
-        states = {
-            'adding_hours': [MessageHandler(Filters.text, self.add_hours)],
-        }
-        fallbacks = []
-        handler = ConversationHandler(entry_points, states, fallbacks)
-        self.updater.dispatcher.add_handler(handler)
-
-    def start(self):
-        self.updater.start_polling()
-        self.updater.idle()
-
-    def add_hours(self, update: Update, context: CallbackContext):
-        guid = uuid4()
-        chat_id = update.message.chat_id
-        # logger = logging.getLogger(__name__)
-        # logger.info('rrr')
-        user = update.message.from_user
-        user_name = f'{user.first_name} {user.last_name}'
-        success, input_data = self.parse_hours_message(guid, update.message.text)
+    def add_hours(self, tg_user_name: str, input_text: str):
+        success, input_data = self._parse_hours_message(tg_user_name, input_text)
         if not success:
-            pass
-        success, error_message = self._db.add_hours(user_name, **input_data)
+            return success, 'Incorrect input data format. Try again.'
+        success, error_message = self._db.add_hours(tg_user_name, **input_data)
         # result = self._sender.run(guid, name, update.message.text)
-        text = 'Successfully recorded.' if success else f'Failed. {error_message}'
-        context.bot.send_message(chat_id=chat_id, text=text)
+        return success, error_message
 
-    def parse_hours_message(self, message_guid, message):
+    def delete_hours(self, tg_user_name: str, input_text: str) -> Tuple[bool, int, str]:
+        success, day = self._parse_date(input_text)
+        error_message = '' if success else 'Неверный формат даты.\n'
+        n = 0 if success else self._db.delete_hours(tg_user_name, day) > 0
+        return success, n, error_message
+        # result = self._sender.run(guid, name, update.message.text)
+
+    def check_access(self, tg_user_name: str):
+        return self._db.is_valid_employee(tg_user_name)
+
+    def _parse_hours_message(self, telegram_user_name: str, message: str):
         fields = message.split(',')
         fields = list(map(lambda s: s.strip(), fields))
         if len(fields) not in [2, 3]:
-            self._logger.error(f'guid: {message_guid}, error message: incorrect input data format')
             return False, None
 
         project, hours, day, *_ = fields + [str(date.today())]
+
+        # Data validation
+        try:
+            day = date.fromisoformat(day)
+        except ValueError:
+            return False, f'Incorrect date {day}'
+
+        if not self._db.is_valid_employee(telegram_user_name):  # todo: сделать для всех запросов
+            return False, f'Incorrect user {telegram_user_name}.'
+
+        if not self._db.is_valid_project(project):
+            return False, f'Incorrect project name {project}.'
+        elif project not in self._db.get_projects(day):
+            return False, f'The project {project} is not actual now.'
+
+        try:
+            hours = int(hours)
+        except ValueError:
+            return False, 'Hours must be int.'
+
         input_data = {'project': project, 'hours': hours, 'day': day}
         return True, input_data
 
     @staticmethod
-    def help(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='You can /add_hours, /report [date], ...')
-
-    @staticmethod
-    def before_add_hours(update: Update, context: CallbackContext):
-        context.bot.send_message(chat_id=update.effective_chat.id, text='Send time in format \"project,time[,day]\"')
-        return 'adding_hours'
-
-    def report(self, update: Update, context: CallbackContext):
-        if len(context.args) > 0:
-            day, month, year = context.args[0].split('.')
-            day = date(year, month, day)
+    def _parse_date(message: str) -> Tuple[bool, date]:
+        if len(message) > 0:
+            try:
+                input_date = date.fromisoformat(message.strip())
+            except ValueError:
+                return False, date.today()
         else:
-            day = date.today()
-        user = update.message.from_user
-        user_name = f'{user.first_name} {user.last_name}'
-        text = self._db.report_by_week(user_name, day).to_string()
-        context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+            input_date = date.today()
+        return True, input_date
+
+    def report(self, tg_user_name: str, message: str):
+        success, day = self._parse_date(message)
+        reply_text = '' if success else 'Неверный формат даты.\n'
+        reply_text += f'Отчет за неделю с {DataBase.get_week_start(day)}.\n'
+        reply_text += self._db.report_by_week(tg_user_name, day).to_string(index=False)
+        return reply_text
+
+    def show_projects(self, message: str = ''):
+        success, day = self._parse_date(message)
+        reply_text = '' if success else 'Неверный формат даты.\n'
+        reply_text += f'Активные проекты на неделю с {DataBase.get_week_start(day)}.\n'
+        reply_text += ' '.join(self._db.get_projects(day))
+        return reply_text
 
     def update_table(self, update: Update, context: CallbackContext):
         # self._sender.run

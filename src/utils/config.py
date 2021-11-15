@@ -115,9 +115,9 @@ class SingleConfig(metaclass=SingletonMeta):
             else:
                 if value is not None:
                     if 'path' in key:
-                        d[key] = str(working_dir.joinpath(value))
+                        d[key] = working_dir.joinpath(value)
                     elif 'location' in key:
-                        d[key] = str(resources_dir.joinpath(value))
+                        d[key] = resources_dir.joinpath(value)
 
     @staticmethod
     def _make_bold(s):
